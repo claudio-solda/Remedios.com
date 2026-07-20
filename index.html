@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Remédios & Pix</title>
+<style>
+  :root{
+    --bg:#0f1720;
+    --card:#1a2530;
+    --accent:#22c55e;
+    --accent-dark:#16a34a;
+    --text:#e6edf3;
+    --muted:#8b9bab;
+    --danger:#ef4444;
+    --border:#2a3945;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0;
+    font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    padding-bottom:100px;
+  }
+  header{
+    padding:20px 16px 14px;
+    background:linear-gradient(180deg,#132018,#0f1720);
+    border-bottom:1px solid var(--border);
+    position:sticky;
+    top:0;
+    z-index:5;
+  }
+  header h1{
+    margin:0;
+    font-size:20px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  header .sub{
+    color:var(--muted);
+    font-size:13px;
+    margin-top:4px;
+  }
+  .summary{
+    display:flex;
+    gap:10px;
+    margin-top:14px;
+  }
+  .summary .box{
+    flex:1;
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:10px 12px;
+  }
+  .summary .box .label{font-size:11px;color:var(--muted);}
+  .summary .box .value{font-size:17px;font-weight:700;margin-top:2px;}
+  .summary .box.pix .value{color:var(--accent);}
+
+  #list{
+    padding:14px 16px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .empty{
+    text-align:center;
+    color:var(--muted);
+    padding:60px 20px;
+    font-size:14px;
+    line-height:1.6;
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:12px;
+    display:flex;
+    gap:12px;
+  }
+  .thumb{
+    width:64px;
+    height:64px;
+    border-radius:10px;
+    object-fit:cover;
+    flex-shrink:0;
+    background:#0d1319;
+    border:1px solid var(--border);
+  }
+  .card-info{flex:1;min-width:0;}
+  .card-info .farmacia{font-weight:600;font-size:15px;}
+  .card-info .data{font-size:12px;color:var(--muted);margin-top:2px;}
+  .card-info .valores{
+    display:flex;
+    gap:14px;
+    margin-top:8px;
+    font-size:13px;
+  }
+  .card-info .valores span b{display:block;font-size:14px;}
+  .card-info .valores .total b{color:var(--text);}
+  .card-info .valores .pix b{color:var(--accent);}
+  .card-actions{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .icon-btn{
+    width:38px;
+    height:38px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:#0d1319;
+    color:var(--text);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:16px;
+    cursor:pointer;
+  }
+  .icon-btn.share{background:#0d2a1c;border-color:#1e4d33;color:var(--accent);}
+  .icon-btn.del{color:var(--danger);}
+
+  .fab{
+    position:fixed;
+    bottom:22px;
+    right:20px;
+    width:60px;
+    height:60px;
+    border-radius:50%;
+    background:var(--accent);
+    color:#052e14;
+    border:none;
+    font-size:30px;
+    font-weight:300;
+    box-shadow:0 6px 18px rgba(34,197,94,.4);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    z-index:10;
+  }
+
+  .sheet-overlay{
+    position:fixed;inset:0;
+    background:rgba(0,0,0,.55);
+    display:none;
+    align-items:flex-end;
+    z-index:20;
+  }
+  .sheet-overlay.open{display:flex;}
+  .sheet{
+    background:var(--bg);
+    width:100%;
+    border-radius:20px 20px 0 0;
+    padding:18px 18px 26px;
+    max-height:90vh;
+    overflow-y:auto;
+    border-top:1px solid var(--border);
+  }
+  .sheet h2{margin:0 0 14px;font-size:18px;}
+  .field{margin-bottom:14px;}
+  .field label{
+    display:block;
+    font-size:12px;
+    color:var(--muted);
+    margin-bottom:6px;
+  }
+  .field input, .field select{
+    width:100%;
+    padding:11px 12px;
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:10px;
+    color:var(--text);
+    font-size:15px;
+  }
+  .photo-row{display:flex;gap:10px;}
+  .photo-btn{
+    flex:1;
+    padding:14px;
+    background:var(--card);
+    border:1px dashed var(--border);
+    border-radius:12px;
+    color:var(--muted);
+    text-align:center;
+    font-size:13px;
+    cursor:pointer;
+  }
+  #preview{
+    width:100%;
+    max-height:220px;
+    object-fit:contain;
+    border-radius:10px;
+    margin-top:10px;
+    display:none;
+    background:#000;
+  }
+  .row2{display:flex;gap:10px;}
+  .row2 .field{flex:1;}
+  .save-btn{
+    width:100%;
+    padding:14px;
+    background:var(--accent);
+    color:#052e14;
+    border:none;
+    border-radius:12px;
+    font-size:16px;
+    font-weight:700;
+    margin-top:6px;
+    cursor:pointer;
+  }
+  .cancel-btn{
+    width:100%;
+    padding:12px;
+    background:transparent;
+    color:var(--muted);
+    border:none;
+    font-size:14px;
+    margin-top:8px;
+  }
+  .hint{font-size:11px;color:var(--muted);margin-top:-8px;margin-bottom:14px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>💊 Remédios & Pix</h1>
+  <div class="sub">Notas da farmácia e reembolso da metade</div>
+  <div class="summary">
+    <div class="box">
+      <div class="label">Notas cadastradas</div>
+      <div class="value" id="sumCount">0</div>
+    </div>
+    <div class="box">
+      <div class="label">Total gasto</div>
+      <div class="value" id="sumTotal">R$ 0,00</div>
+    </div>
+    <div class="box pix">
+      <div class="label">Total Pix (metade)</div>
+      <div class="value" id="sumPix">R$ 0,00</div>
+    </div>
+  </div>
+</header>
+
+<div id="list"></div>
+
+<button class="fab" onclick="openSheet()">+</button>
+
+<div class="sheet-overlay" id="overlay">
+  <div class="sheet">
+    <h2 id="sheetTitle">Nova nota</h2>
+
+    <div class="photo-row">
+      <label class="photo-btn" for="fileCam">📷<br>Tirar foto</label>
+      <label class="photo-btn" for="fileGal">🖼️<br>Da galeria</label>
+    </div>
+    <input type="file" id="fileCam" accept="image/*" capture="environment" style="display:none">
+    <input type="file" id="fileGal" accept="image/*" style="display:none">
+    <img id="preview">
+
+    <div class="field" style="margin-top:14px;">
+      <label>Farmácia / Descrição</label>
+      <input type="text" id="fFarmacia" placeholder="Ex: Drogasil">
+    </div>
+
+    <div class="row2">
+      <div class="field">
+        <label>Data</label>
+        <input type="date" id="fData">
+      </div>
+      <div class="field">
+        <label>Valor total (R$)</label>
+        <input type="number" id="fTotal" step="0.01" inputmode="decimal" placeholder="0,00">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Valor do Pix (metade — pode ajustar)</label>
+      <input type="number" id="fPix" step="0.01" inputmode="decimal" placeholder="0,00">
+    </div>
+    <div class="hint">Calculado automaticamente como metade do valor total.</div>
+
+    <button class="save-btn" onclick="saveNote()">Salvar nota</button>
+    <button class="cancel-btn" onclick="closeSheet()">Cancelar</button>
+  </div>
+</div>
+
+<script>
+const STORE_KEY = 'remedios_pix_notas_v1';
+let editingId = null;
+let currentPhoto = null; // base64
+
+function loadNotes(){
+  try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
+  catch(e){ return []; }
+}
+function saveNotes(notes){
+  localStorage.setItem(STORE_KEY, JSON.stringify(notes));
+}
+
+function fmt(v){
+  return 'R$ ' + (Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function fmtDate(iso){
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function render(){
+  const notes = loadNotes().sort((a,b)=> b.data.localeCompare(a.data));
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+
+  if(notes.length === 0){
+    list.innerHTML = '<div class="empty">Nenhuma nota cadastrada ainda.<br>Toque no + para adicionar a primeira.</div>';
+  }
+
+  let total=0, pix=0;
+  notes.forEach(n=>{
+    total += Number(n.total);
+    pix += Number(n.pix);
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <img class="thumb" src="${n.foto || ''}" onerror="this.style.opacity=0">
+      <div class="card-info">
+        <div class="farmacia">${n.farmacia || 'Farmácia'}</div>
+        <div class="data">${fmtDate(n.data)}</div>
+        <div class="valores">
+          <span class="total">Total<b>${fmt(n.total)}</b></span>
+          <span class="pix">Pix<b>${fmt(n.pix)}</b></span>
+        </div>
+      </div>
+      <div class="card-actions">
+        <button class="icon-btn share" onclick="shareNote('${n.id}')">↗</button>
+        <button class="icon-btn" onclick="editNote('${n.id}')">✎</button>
+        <button class="icon-btn del" onclick="deleteNote('${n.id}')">🗑</button>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+
+  document.getElementById('sumCount').textContent = notes.length;
+  document.getElementById('sumTotal').textContent = fmt(total);
+  document.getElementById('sumPix').textContent = fmt(pix);
+}
+
+function openSheet(note){
+  editingId = note ? note.id : null;
+  document.getElementById('sheetTitle').textContent = note ? 'Editar nota' : 'Nova nota';
+  document.getElementById('fFarmacia').value = note?.farmacia || '';
+  document.getElementById('fData').value = note?.data || new Date().toISOString().slice(0,10);
+  document.getElementById('fTotal').value = note?.total || '';
+  document.getElementById('fPix').value = note?.pix || '';
+  currentPhoto = note?.foto || null;
+  const prev = document.getElementById('preview');
+  if(currentPhoto){ prev.src = currentPhoto; prev.style.display='block'; }
+  else { prev.style.display='none'; prev.src=''; }
+  document.getElementById('overlay').classList.add('open');
+}
+function closeSheet(){
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('fileCam').value = '';
+  document.getElementById('fileGal').value = '';
+}
+
+function resizeAndSet(file){
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 1000;
+      let {width, height} = img;
+      if(width > height && width > maxDim){ height = height*maxDim/width; width = maxDim; }
+      else if(height > maxDim){ width = width*maxDim/height; height = maxDim; }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img,0,0,width,height);
+      currentPhoto = canvas.toDataURL('image/jpeg', 0.75);
+      const prev = document.getElementById('preview');
+      prev.src = currentPhoto;
+      prev.style.display = 'block';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+document.getElementById('fileCam').addEventListener('change', e=>{
+  if(e.target.files[0]) resizeAndSet(e.target.files[0]);
+});
+document.getElementById('fileGal').addEventListener('change', e=>{
+  if(e.target.files[0]) resizeAndSet(e.target.files[0]);
+});
+
+document.getElementById('fTotal').addEventListener('input', e=>{
+  const v = parseFloat(e.target.value);
+  if(!isNaN(v)){
+    document.getElementById('fPix').value = (v/2).toFixed(2);
+  }
+});
+
+function saveNote(){
+  const farmacia = document.getElementById('fFarmacia').value.trim();
+  const data = document.getElementById('fData').value;
+  const total = parseFloat(document.getElementById('fTotal').value);
+  const pix = parseFloat(document.getElementById('fPix').value);
+
+  if(!data || isNaN(total)){
+    alert('Preencha ao menos a data e o valor total.');
+    return;
+  }
+
+  let notes = loadNotes();
+  if(editingId){
+    notes = notes.map(n => n.id === editingId
+      ? {...n, farmacia, data, total, pix: isNaN(pix)?total/2:pix, foto: currentPhoto}
+      : n);
+  } else {
+    notes.push({
+      id: Date.now().toString(),
+      farmacia, data, total,
+      pix: isNaN(pix) ? total/2 : pix,
+      foto: currentPhoto
+    });
+  }
+  saveNotes(notes);
+  closeSheet();
+  render();
+}
+
+function editNote(id){
+  const note = loadNotes().find(n=>n.id===id);
+  if(note) openSheet(note);
+}
+
+function deleteNote(id){
+  if(!confirm('Excluir esta nota?')) return;
+  const notes = loadNotes().filter(n=>n.id!==id);
+  saveNotes(notes);
+  render();
+}
+
+async function dataURLtoFile(dataUrl, filename){
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  return new File([blob], filename, {type: blob.type});
+}
+
+async function shareNote(id){
+  const n = loadNotes().find(x=>x.id===id);
+  if(!n) return;
+  const texto = `💊 ${n.farmacia || 'Farmácia'}\nData: ${fmtDate(n.data)}\nValor total: ${fmt(n.total)}\nPix (metade): ${fmt(n.pix)}`;
+
+  try{
+    if(n.foto && navigator.canShare){
+      const file = await dataURLtoFile(n.foto, 'nota.jpg');
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({
+          text: texto,
+          files: [file]
+        });
+        return;
+      }
+    }
+    if(navigator.share){
+      await navigator.share({text: texto});
+      return;
+    }
+    await navigator.clipboard.writeText(texto);
+    alert('Compartilhamento não suportado — texto copiado para a área de transferência.');
+  }catch(e){
+    if(e.name !== 'AbortError'){
+      console.error(e);
+      alert('Não foi possível compartilhar.');
+    }
+  }
+}
+
+render();
+</script>
+</body>
+</html>
