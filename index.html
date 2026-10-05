@@ -15,8 +15,9 @@
   :root{
     --bg:#0f1720;
     --card:#1a2530;
-    --accent:#22c55e;
-    --accent-dark:#16a34a;
+    --accent:#3b82f6;
+    --accent-dark:#2563eb;
+    --on-accent:#06142e;
     --text:#e6edf3;
     --muted:#8b9bab;
     --danger:#ef4444;
@@ -33,7 +34,7 @@
   }
   header{
     padding:20px 16px 14px;
-    background:linear-gradient(180deg,#132018,#0f1720);
+    background:linear-gradient(180deg,#131c2e,#0f1720);
     border-bottom:1px solid var(--border);
     position:sticky;
     top:0;
@@ -97,9 +98,23 @@
     background:#0d1319;
     border:1px solid var(--border);
   }
+  .thumb.vazio{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:26px;
+  }
   .card-info{flex:1;min-width:0;}
   .card-info .farmacia{font-weight:600;font-size:15px;}
   .card-info .data{font-size:12px;color:var(--muted);margin-top:2px;}
+  .card-info .meds{
+    margin-top:8px;
+    font-size:12px;
+    line-height:1.5;
+    color:var(--muted);
+    white-space:pre-line;
+    overflow-wrap:anywhere;
+  }
   .card-info .valores{
     display:flex;
     gap:14px;
@@ -127,7 +142,7 @@
     font-size:16px;
     cursor:pointer;
   }
-  .icon-btn.share{background:#0d2a1c;border-color:#1e4d33;color:var(--accent);}
+  .icon-btn.share{background:#0d1f3a;border-color:#1e3d6b;color:var(--accent);}
   .icon-btn.del{color:var(--danger);}
 
   .fab{
@@ -138,11 +153,11 @@
     height:60px;
     border-radius:50%;
     background:var(--accent);
-    color:#052e14;
+    color:var(--on-accent);
     border:none;
     font-size:30px;
     font-weight:300;
-    box-shadow:0 6px 18px rgba(34,197,94,.4);
+    box-shadow:0 6px 18px rgba(59,130,246,.4);
     display:flex;
     align-items:center;
     justify-content:center;
@@ -175,7 +190,7 @@
     color:var(--muted);
     margin-bottom:6px;
   }
-  .field input, .field select{
+  .field input, .field select, .field textarea{
     width:100%;
     padding:11px 12px;
     background:var(--card);
@@ -183,7 +198,9 @@
     border-radius:10px;
     color:var(--text);
     font-size:15px;
+    font-family:inherit;
   }
+  .field textarea{min-height:110px;resize:vertical;line-height:1.4;}
   .photo-row{display:flex;gap:10px;}
   .photo-btn{
     flex:1;
@@ -211,7 +228,7 @@
     width:100%;
     padding:14px;
     background:var(--accent);
-    color:#052e14;
+    color:var(--on-accent);
     border:none;
     border-radius:12px;
     font-size:16px;
@@ -273,6 +290,11 @@
       <input type="text" id="fFarmacia" placeholder="Ex: Drogasil">
     </div>
 
+    <div class="field">
+      <label>Medicamentos (um por linha)</label>
+      <textarea id="fMeds" placeholder="Ex: CeraVe loção facial — R$ 125,99"></textarea>
+    </div>
+
     <div class="row2">
       <div class="field">
         <label>Data</label>
@@ -297,8 +319,29 @@
 
 <script>
 const STORE_KEY = 'remedios_pix_notas_v1';
+const SEED_KEY = 'remedios_pix_seeds_v1';
 let editingId = null;
 let currentPhoto = null; // base64
+
+// Notas já prontas: entram uma única vez. Se você excluir, não voltam.
+const SEED_NOTES = [
+  {
+    id: 'seed-2026-09-29-drogasil',
+    farmacia: 'Drogasil',
+    data: '2026-09-29',
+    total: 486.66,
+    pix: 243.33,
+    meds: [
+      'CeraVe loção facial hidratante FPS 50 — R$ 125,99',
+      'Profuse Nutrel Suavizante Balm 50 g — R$ 85,99',
+      'Profuse Nutrel Gel de Limpeza 150 ml — R$ 75,99',
+      'Eucerin Aquaphor 2 bisnagas — R$ 49,99',
+      'Acnova 20 mg 30 cáps. (1ª caixa) — R$ 74,35',
+      'Acnova 20 mg 30 cáps. (2ª caixa) — R$ 74,35'
+    ].join('\n'),
+    foto: null
+  }
+];
 
 function loadNotes(){
   try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
@@ -308,6 +351,29 @@ function saveNotes(notes){
   localStorage.setItem(STORE_KEY, JSON.stringify(notes));
 }
 
+function applySeeds(){
+  let applied = [];
+  try{ applied = JSON.parse(localStorage.getItem(SEED_KEY)) || []; }catch(e){}
+  const notes = loadNotes();
+  let changed = false;
+  SEED_NOTES.forEach(s=>{
+    if(!applied.includes(s.id)){
+      if(!notes.some(n=>n.id===s.id)) notes.push({...s});
+      applied.push(s.id);
+      changed = true;
+    }
+  });
+  if(changed){
+    saveNotes(notes);
+    localStorage.setItem(SEED_KEY, JSON.stringify(applied));
+  }
+}
+
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+}
 function fmt(v){
   return 'R$ ' + (Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2});
 }
@@ -331,11 +397,16 @@ function render(){
     pix += Number(n.pix);
     const card = document.createElement('div');
     card.className = 'card';
+    const thumb = n.foto
+      ? `<img class="thumb" src="${n.foto}">`
+      : `<div class="thumb vazio">💊</div>`;
+    const meds = n.meds ? `<div class="meds">${esc(n.meds)}</div>` : '';
     card.innerHTML = `
-      <img class="thumb" src="${n.foto || ''}" onerror="this.style.opacity=0">
+      ${thumb}
       <div class="card-info">
-        <div class="farmacia">${n.farmacia || 'Farmácia'}</div>
+        <div class="farmacia">${esc(n.farmacia) || 'Farmácia'}</div>
         <div class="data">${fmtDate(n.data)}</div>
+        ${meds}
         <div class="valores">
           <span class="total">Total<b>${fmt(n.total)}</b></span>
           <span class="pix">Pix<b>${fmt(n.pix)}</b></span>
@@ -359,6 +430,7 @@ function openSheet(note){
   editingId = note ? note.id : null;
   document.getElementById('sheetTitle').textContent = note ? 'Editar nota' : 'Nova nota';
   document.getElementById('fFarmacia').value = note?.farmacia || '';
+  document.getElementById('fMeds').value = note?.meds || '';
   document.getElementById('fData').value = note?.data || new Date().toISOString().slice(0,10);
   document.getElementById('fTotal').value = note?.total || '';
   document.getElementById('fPix').value = note?.pix || '';
@@ -411,6 +483,7 @@ document.getElementById('fTotal').addEventListener('input', e=>{
 
 function saveNote(){
   const farmacia = document.getElementById('fFarmacia').value.trim();
+  const meds = document.getElementById('fMeds').value.trim();
   const data = document.getElementById('fData').value;
   const total = parseFloat(document.getElementById('fTotal').value);
   const pix = parseFloat(document.getElementById('fPix').value);
@@ -423,12 +496,12 @@ function saveNote(){
   let notes = loadNotes();
   if(editingId){
     notes = notes.map(n => n.id === editingId
-      ? {...n, farmacia, data, total, pix: isNaN(pix)?total/2:pix, foto: currentPhoto}
+      ? {...n, farmacia, meds, data, total, pix: isNaN(pix)?total/2:pix, foto: currentPhoto}
       : n);
   } else {
     notes.push({
       id: Date.now().toString(),
-      farmacia, data, total,
+      farmacia, meds, data, total,
       pix: isNaN(pix) ? total/2 : pix,
       foto: currentPhoto
     });
@@ -459,7 +532,8 @@ async function dataURLtoFile(dataUrl, filename){
 async function shareNote(id){
   const n = loadNotes().find(x=>x.id===id);
   if(!n) return;
-  const texto = `💊 ${n.farmacia || 'Farmácia'}\nData: ${fmtDate(n.data)}\nValor total: ${fmt(n.total)}\nPix (metade): ${fmt(n.pix)}`;
+  const meds = n.meds ? `\n${n.meds}` : '';
+  const texto = `💊 ${n.farmacia || 'Farmácia'}\nData: ${fmtDate(n.data)}${meds}\nValor total: ${fmt(n.total)}\nPix (metade): ${fmt(n.pix)}`;
 
   try{
     if(n.foto && navigator.canShare){
@@ -486,6 +560,7 @@ async function shareNote(id){
   }
 }
 
+applySeeds();
 render();
 
 if ('serviceWorker' in navigator) {
