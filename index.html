@@ -21,6 +21,7 @@
     --text:#e6edf3;
     --muted:#8b9bab;
     --danger:#ef4444;
+    --warn:#f59e0b;
     --border:#2a3945;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -124,6 +125,16 @@
   .card-info .valores span b{display:block;font-size:14px;}
   .card-info .valores .total b{color:var(--text);}
   .card-info .valores .pix b{color:var(--accent);}
+  .badge{
+    display:inline-block;
+    margin-top:8px;
+    font-size:11px;
+    padding:3px 9px;
+    border-radius:999px;
+    font-weight:600;
+  }
+  .badge.pago{background:#0d1f3a;border:1px solid #1e3d6b;color:var(--accent);}
+  .badge.pend{background:#2a2110;border:1px solid #5a4516;color:var(--warn);}
   .card-actions{
     display:flex;
     flex-direction:column;
@@ -212,8 +223,9 @@
     text-align:center;
     font-size:13px;
     cursor:pointer;
+    display:block;
   }
-  #preview{
+  #preview, #previewComp{
     width:100%;
     max-height:220px;
     object-fit:contain;
@@ -221,6 +233,16 @@
     margin-top:10px;
     display:none;
     background:#000;
+  }
+  .link-btn{
+    background:transparent;
+    border:none;
+    color:var(--danger);
+    font-size:12px;
+    margin-top:6px;
+    padding:4px 0;
+    cursor:pointer;
+    display:none;
   }
   .row2{display:flex;gap:10px;}
   .row2 .field{flex:1;}
@@ -246,6 +268,21 @@
     margin-top:8px;
   }
   .hint{font-size:11px;color:var(--muted);margin-top:-8px;margin-bottom:14px;}
+
+  #viewer{
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    padding:16px;
+    background:rgba(0,0,0,.88);
+  }
+  #viewer img{
+    max-width:100%;
+    max-height:82vh;
+    border-radius:10px;
+    background:#fff;
+  }
+  #viewer .close-hint{color:var(--muted);font-size:13px;margin-top:12px;}
 </style>
 </head>
 <body>
@@ -312,16 +349,36 @@
     </div>
     <div class="hint">Calculado automaticamente como metade do valor total.</div>
 
+    <div class="field">
+      <label>Pix pago em (deixe vazio se ainda não pagou)</label>
+      <input type="date" id="fPixData">
+    </div>
+
+    <div class="field">
+      <label>Comprovante do Pix</label>
+      <label class="photo-btn" for="fileComp">🧾 Anexar comprovante (galeria)</label>
+      <input type="file" id="fileComp" accept="image/*" style="display:none">
+      <img id="previewComp">
+      <button type="button" class="link-btn" id="btnRemoveComp" onclick="removeComp()">Remover comprovante</button>
+    </div>
+
     <button class="save-btn" onclick="saveNote()">Salvar nota</button>
     <button class="cancel-btn" onclick="closeSheet()">Cancelar</button>
   </div>
 </div>
 
+<div class="sheet-overlay" id="viewer" onclick="closeViewer()">
+  <img id="viewerImg">
+  <div class="close-hint">Toque para fechar</div>
+</div>
+
 <script>
 const STORE_KEY = 'remedios_pix_notas_v1';
 const SEED_KEY = 'remedios_pix_seeds_v1';
+const PATCH_KEY = 'remedios_pix_patches_v1';
 let editingId = null;
-let currentPhoto = null; // base64
+let currentPhoto = null; // base64 da nota
+let currentComp = null;  // base64 do comprovante do Pix
 
 // Notas já prontas: entram uma única vez. Se você excluir, não voltam.
 const SEED_NOTES = [
@@ -331,6 +388,7 @@ const SEED_NOTES = [
     data: '2026-09-29',
     total: 486.66,
     pix: 243.33,
+    pixPagoEm: '2026-10-20',
     meds: [
       'CeraVe loção facial hidratante FPS 50 — R$ 125,99',
       'Profuse Nutrel Suavizante Balm 50 g — R$ 85,99',
@@ -339,8 +397,14 @@ const SEED_NOTES = [
       'Acnova 20 mg 30 cáps. (1ª caixa) — R$ 74,35',
       'Acnova 20 mg 30 cáps. (2ª caixa) — R$ 74,35'
     ].join('\n'),
-    foto: null
+    foto: null,
+    comprovante: null
   }
+];
+
+// Ajustes únicos em notas que já existem no celular (não apagam foto nem nada).
+const PATCHES = [
+  { id: 'pix-pago-drogasil-2026-10-20', noteId: 'seed-2026-09-29-drogasil', set: { pixPagoEm: '2026-10-20' } }
 ];
 
 function loadNotes(){
@@ -348,7 +412,11 @@ function loadNotes(){
   catch(e){ return []; }
 }
 function saveNotes(notes){
-  localStorage.setItem(STORE_KEY, JSON.stringify(notes));
+  try{
+    localStorage.setItem(STORE_KEY, JSON.stringify(notes));
+  }catch(e){
+    alert('Sem espaço para salvar. Tente reduzir o número de fotos.');
+  }
 }
 
 function applySeeds(){
@@ -366,6 +434,29 @@ function applySeeds(){
   if(changed){
     saveNotes(notes);
     localStorage.setItem(SEED_KEY, JSON.stringify(applied));
+  }
+}
+
+function applyPatches(){
+  let applied = [];
+  try{ applied = JSON.parse(localStorage.getItem(PATCH_KEY)) || []; }catch(e){}
+  const notes = loadNotes();
+  let changed = false;
+  PATCHES.forEach(p=>{
+    if(!applied.includes(p.id)){
+      const n = notes.find(x=>x.id===p.noteId);
+      if(n){
+        Object.keys(p.set).forEach(k=>{
+          if(n[k] === undefined || n[k] === null || n[k] === '') n[k] = p.set[k];
+        });
+      }
+      applied.push(p.id);
+      changed = true;
+    }
+  });
+  if(changed){
+    saveNotes(notes);
+    localStorage.setItem(PATCH_KEY, JSON.stringify(applied));
   }
 }
 
@@ -401,6 +492,12 @@ function render(){
       ? `<img class="thumb" src="${n.foto}">`
       : `<div class="thumb vazio">💊</div>`;
     const meds = n.meds ? `<div class="meds">${esc(n.meds)}</div>` : '';
+    const badge = n.pixPagoEm
+      ? `<div class="badge pago">✔ Pix pago em ${fmtDate(n.pixPagoEm)}</div>`
+      : `<div class="badge pend">Pix pendente</div>`;
+    const btnComp = n.comprovante
+      ? `<button class="icon-btn" onclick="viewComp('${n.id}')">🧾</button>`
+      : '';
     card.innerHTML = `
       ${thumb}
       <div class="card-info">
@@ -411,9 +508,11 @@ function render(){
           <span class="total">Total<b>${fmt(n.total)}</b></span>
           <span class="pix">Pix<b>${fmt(n.pix)}</b></span>
         </div>
+        ${badge}
       </div>
       <div class="card-actions">
         <button class="icon-btn share" onclick="shareNote('${n.id}')">↗</button>
+        ${btnComp}
         <button class="icon-btn" onclick="editNote('${n.id}')">✎</button>
         <button class="icon-btn del" onclick="deleteNote('${n.id}')">🗑</button>
       </div>
@@ -426,6 +525,13 @@ function render(){
   document.getElementById('sumPix').textContent = fmt(pix);
 }
 
+function showPreview(imgId, src, btnId){
+  const el = document.getElementById(imgId);
+  if(src){ el.src = src; el.style.display='block'; }
+  else { el.style.display='none'; el.removeAttribute('src'); }
+  if(btnId) document.getElementById(btnId).style.display = src ? 'block' : 'none';
+}
+
 function openSheet(note){
   editingId = note ? note.id : null;
   document.getElementById('sheetTitle').textContent = note ? 'Editar nota' : 'Nova nota';
@@ -434,44 +540,63 @@ function openSheet(note){
   document.getElementById('fData').value = note?.data || new Date().toISOString().slice(0,10);
   document.getElementById('fTotal').value = note?.total || '';
   document.getElementById('fPix').value = note?.pix || '';
+  document.getElementById('fPixData').value = note?.pixPagoEm || '';
   currentPhoto = note?.foto || null;
-  const prev = document.getElementById('preview');
-  if(currentPhoto){ prev.src = currentPhoto; prev.style.display='block'; }
-  else { prev.style.display='none'; prev.src=''; }
+  currentComp = note?.comprovante || null;
+  showPreview('preview', currentPhoto);
+  showPreview('previewComp', currentComp, 'btnRemoveComp');
   document.getElementById('overlay').classList.add('open');
 }
 function closeSheet(){
   document.getElementById('overlay').classList.remove('open');
   document.getElementById('fileCam').value = '';
   document.getElementById('fileGal').value = '';
+  document.getElementById('fileComp').value = '';
 }
 
-function resizeAndSet(file){
+function resizeImage(file, maxDim, cb){
   const reader = new FileReader();
   reader.onload = e => {
     const img = new Image();
     img.onload = () => {
-      const maxDim = 1000;
       let {width, height} = img;
       if(width > height && width > maxDim){ height = height*maxDim/width; width = maxDim; }
       else if(height > maxDim){ width = width*maxDim/height; height = maxDim; }
       const canvas = document.createElement('canvas');
       canvas.width = width; canvas.height = height;
       canvas.getContext('2d').drawImage(img,0,0,width,height);
-      currentPhoto = canvas.toDataURL('image/jpeg', 0.75);
-      const prev = document.getElementById('preview');
-      prev.src = currentPhoto;
-      prev.style.display = 'block';
+      cb(canvas.toDataURL('image/jpeg', 0.75));
     };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
+function setPhoto(file){
+  resizeImage(file, 1000, data => {
+    currentPhoto = data;
+    showPreview('preview', currentPhoto);
+  });
+}
+function setComp(file){
+  resizeImage(file, 1400, data => {
+    currentComp = data;
+    showPreview('previewComp', currentComp, 'btnRemoveComp');
+  });
+}
+function removeComp(){
+  currentComp = null;
+  document.getElementById('fileComp').value = '';
+  showPreview('previewComp', null, 'btnRemoveComp');
+}
+
 document.getElementById('fileCam').addEventListener('change', e=>{
-  if(e.target.files[0]) resizeAndSet(e.target.files[0]);
+  if(e.target.files[0]) setPhoto(e.target.files[0]);
 });
 document.getElementById('fileGal').addEventListener('change', e=>{
-  if(e.target.files[0]) resizeAndSet(e.target.files[0]);
+  if(e.target.files[0]) setPhoto(e.target.files[0]);
+});
+document.getElementById('fileComp').addEventListener('change', e=>{
+  if(e.target.files[0]) setComp(e.target.files[0]);
 });
 
 document.getElementById('fTotal').addEventListener('input', e=>{
@@ -487,6 +612,7 @@ function saveNote(){
   const data = document.getElementById('fData').value;
   const total = parseFloat(document.getElementById('fTotal').value);
   const pix = parseFloat(document.getElementById('fPix').value);
+  const pixPagoEm = document.getElementById('fPixData').value || null;
 
   if(!data || isNaN(total)){
     alert('Preencha ao menos a data e o valor total.');
@@ -496,14 +622,16 @@ function saveNote(){
   let notes = loadNotes();
   if(editingId){
     notes = notes.map(n => n.id === editingId
-      ? {...n, farmacia, meds, data, total, pix: isNaN(pix)?total/2:pix, foto: currentPhoto}
+      ? {...n, farmacia, meds, data, total, pix: isNaN(pix)?total/2:pix, foto: currentPhoto, pixPagoEm, comprovante: currentComp}
       : n);
   } else {
     notes.push({
       id: Date.now().toString(),
       farmacia, meds, data, total,
       pix: isNaN(pix) ? total/2 : pix,
-      foto: currentPhoto
+      foto: currentPhoto,
+      pixPagoEm,
+      comprovante: currentComp
     });
   }
   saveNotes(notes);
@@ -523,6 +651,16 @@ function deleteNote(id){
   render();
 }
 
+function viewComp(id){
+  const n = loadNotes().find(x=>x.id===id);
+  if(!n || !n.comprovante) return;
+  document.getElementById('viewerImg').src = n.comprovante;
+  document.getElementById('viewer').classList.add('open');
+}
+function closeViewer(){
+  document.getElementById('viewer').classList.remove('open');
+}
+
 async function dataURLtoFile(dataUrl, filename){
   const res = await fetch(dataUrl);
   const blob = await res.blob();
@@ -533,16 +671,16 @@ async function shareNote(id){
   const n = loadNotes().find(x=>x.id===id);
   if(!n) return;
   const meds = n.meds ? `\n${n.meds}` : '';
-  const texto = `💊 ${n.farmacia || 'Farmácia'}\nData: ${fmtDate(n.data)}${meds}\nValor total: ${fmt(n.total)}\nPix (metade): ${fmt(n.pix)}`;
+  const pago = n.pixPagoEm ? `\nPix pago em: ${fmtDate(n.pixPagoEm)}` : '';
+  const texto = `💊 ${n.farmacia || 'Farmácia'}\nData: ${fmtDate(n.data)}${meds}\nValor total: ${fmt(n.total)}\nPix (metade): ${fmt(n.pix)}${pago}`;
 
   try{
-    if(n.foto && navigator.canShare){
-      const file = await dataURLtoFile(n.foto, 'nota.jpg');
-      if(navigator.canShare({files:[file]})){
-        await navigator.share({
-          text: texto,
-          files: [file]
-        });
+    if((n.foto || n.comprovante) && navigator.canShare){
+      const files = [];
+      if(n.foto) files.push(await dataURLtoFile(n.foto, 'nota.jpg'));
+      if(n.comprovante) files.push(await dataURLtoFile(n.comprovante, 'comprovante-pix.jpg'));
+      if(navigator.canShare({files})){
+        await navigator.share({ text: texto, files });
         return;
       }
     }
@@ -561,6 +699,7 @@ async function shareNote(id){
 }
 
 applySeeds();
+applyPatches();
 render();
 
 if ('serviceWorker' in navigator) {
